@@ -1,0 +1,134 @@
+.dashboard-layout {
+  min-height: calc(100vh - 100px);
+  background-color: var(--bg-light);
+  padding: 2rem 1rem;
+}
+
+.dashboard-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  margin-bottom: 2rem;
+}
+
+.dashboard-header h3 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.dashboard-nav {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-nav a {
+  position: relative;
+  padding: 0.75rem 1.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+.dashboard-nav a:hover {
+  color: var(--primary-color);
+  background-color: rgba(84, 153, 248, 0.05);
+}
+
+.dashboard-nav a.active {
+  color: var(--primary-color);
+  background-color: rgba(84, 153, 248, 0.1);
+  border-bottom: 3px solid var(--primary-color);
+  margin-bottom: -1rem;
+  padding-bottom: calc(0.75rem + 1rem);
+}
+
+.dashboard-outlet {
+  margin-top: 2rem;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: 1.5rem;
+  margin: 1rem 0;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.card h4 {
+  margin-top: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-layout {
+    padding: 1rem;
+  }
+
+  .dashboard-header h3 {
+    font-size: 1.5rem;
+  }
+
+  .dashboard-nav {
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .dashboard-nav a {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .card {
+    padding: 1rem;
+    margin: 0.75rem 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-layout {
+    padding: 0.75rem;
+  }
+
+  .dashboard-header h3 {
+    font-size: 1.25rem;
+  }
+
+  .dashboard-nav {
+    gap: 0.25rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .dashboard-nav a {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+  }
+}
