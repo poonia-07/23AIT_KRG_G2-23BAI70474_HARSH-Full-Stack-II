@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivePoll Security — Experiment 8</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+      --border: #2e3347; --text: #e2e8f0; --muted: #8892a4;
+      --blue: #4f8ef7; --green: #34d399; --red: #f87171;
+      --yellow: #fbbf24; --purple: #a78bfa;
+      --radius: 8px; --mono: 'Consolas', monospace;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .header-title { font-size: 15px; font-weight: 700; }
+    .header-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .pill { display: none; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px 4px 8px; font-size: 12px; }
+    .pill.show { display: flex; }
+    .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-blue { background: rgba(79,142,247,.15); color: var(--blue); }
+    .badge-green { background: rgba(52,211,153,.15); color: var(--green); }
+    .badge-red { background: rgba(248,113,113,.15); color: var(--red); }
+    .badge-yellow { background: rgba(251,191,36,.15); color: var(--yellow); }
+    .badge-purple { background: rgba(167,139,250,.15); color: var(--purple); }
+
+    main { display: grid; grid-template-columns: 210px 1fr 300px; height: calc(100vh - 53px); }
+
+    /* sidebar */
+    .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 14px 0; overflow-y: auto; }
+    .sl { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 8px 16px 4px; }
+    .nav { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; color: var(--muted); font-size: 13px; border-left: 2px solid transparent; transition: all .15s; }
+    .nav:hover { background: var(--surface2); color: var(--text); }
+    .nav.active { color: var(--blue); border-left-color: var(--blue); background: rgba(79,142,247,.1); }
+    .qlogin { margin-left: auto; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--surface2); color: var(--muted); }
+
+    /* content */
+    .content { overflow-y: auto; padding: 24px; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .panel-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .panel-desc { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+    .card-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; transition: border-color .15s; margin-bottom: 10px; }
+    input:focus, select:focus { border-color: var(--blue); }
+    button { background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .15s; margin: 3px 3px 3px 0; }
+    button:hover { opacity: .85; }
+    button.sec { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    button.danger { background: var(--red); }
+    button.success { background: var(--green); color: #000; }
+    button.full { width: 100%; display: block; margin-bottom: 8px; }
+    .result { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 12px; line-height: 1.7; min-height: 44px; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+    .result.ok  { border-color: rgba(52,211,153,.4); color: var(--green); }
+    .result.err { border-color: rgba(248,113,113,.4); color: var(--red); }
+    .result.info { border-color: rgba(79,142,247,.4); color: var(--blue); }
+
+    /* RBAC table */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 6px 10px; background: var(--surface2); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    .tick { color: var(--green); font-weight: 700; }
+    .cross { color: var(--red); }
+
+    /* poll card */
+    .poll-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+    .poll-q { font-weight: 600; margin-bottom: 8px; }
+    .poll-opt { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .poll-bar-wrap { flex: 1; background: var(--surface); border-radius: 4px; height: 8px; overflow: hidden; }
+    .poll-bar { height: 100%; background: var(--blue); border-radius: 4px; transition: width .4s; }
+    .poll-pct { font-size: 11px; color: var(--muted); width: 36px; text-align: right; }
+
+    /* log panel */
+    .log-panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .log-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .log-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .log-body { flex: 1; overflow-y: auto; padding: 8px; }
+    .log-entry { font-family: var(--mono); font-size: 11px; line-height: 1.5; padding: 5px 8px; border-radius: 5px; margin-bottom: 3px; border-left: 2px solid transparent; }
+    .log-entry.req { border-color: var(--blue); color: var(--blue); background: rgba(79,142,247,.1); }
+    .log-entry.ok  { border-color: var(--green); color: var(--green); background: rgba(52,211,153,.1); }
+    .log-entry.err { border-color: var(--red); color: var(--red); background: rgba(248,113,113,.1); }
+    .log-entry.info { border-color: var(--muted); color: var(--muted); }
+    .log-time { opacity: .6; margin-right: 6px; }
+    .clr-btn { font-size: 11px; color: var(--muted); cursor: pointer; background: none; border: none; padding: 3px 8px; }
+    .clr-btn:hover { color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-title">🗳️ LivePoll Security — Experiment 8</div>
+    <div class="header-sub">Spring Security · JWT · RBAC · OAuth 2.0 Concepts · Full-Stack Integration</div>
+  </div>
+  <div id="pill" class="pill">
+    <div id="avatar" class="avatar">?</div>
+    <span id="uname"></span>
+    <span id="urole" class="badge badge-blue"></span>
+  </div>
+</header>
+
+<main>
+  <nav class="sidebar">
+    <div class="sl">Authentication</div>
+    <div class="nav active" onclick="show('login',this)">🔑 Login / JWT</div>
+    <div class="nav" onclick="show('jwt',this)">🪙 JWT Inspector</div>
+    <div class="nav" onclick="show('oauth',this)">🌐 OAuth 2.0</div>
+
+    <div class="sl">Authorization</div>
+    <div class="nav" onclick="show('rbac',this)">🛡️ RBAC Demo</div>
+    <div class="nav" onclick="show('polls',this)">📊 LivePoll (RBAC Live)</div>
+
+    <div class="sl">Full-Stack</div>
+    <div class="nav" onclick="show('cors',this)">🔗 CORS</div>
+    <div class="nav" onclick="show('refresh',this)">🔄 Refresh Token</div>
+
+    <div class="sl">Quick Login</div>
+    <div class="nav" onclick="quickLogin('admin','admin123')">👤 admin <span class="qlogin">ADMIN</span></div>
+    <div class="nav" onclick="quickLogin('moderator','mod123')">👤 moderator <span class="qlogin">MOD</span></div>
+    <div class="nav" onclick="quickLogin('user','user123')">👤 user <span class="qlogin">USER</span></div>
+  </nav>
+
+  <div class="content">
+
+    <!-- LOGIN -->
+    <div id="panel-login" class="panel active">
+      <div class="panel-title">Authentication (AuthN)</div>
+      <div class="panel-desc">Spring Security's AuthenticationManager verifies credentials against the UserDetailsService. On success, we generate an access token (24h) and refresh token (7d).</div>
+      <div class="card">
+        <div class="card-title">Login</div>
+        <label>Username</label><input id="lu" value="admin"/>
+        <label>Password</label><input id="lp" type="password" value="admin123"/>
+        <button class="full" onclick="doLogin()">Login → Get JWT Pair</button>
+        <button class="full sec" onclick="doLogout()">Logout (clear tokens)</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Response</div>
+        <div id="login-res" class="result">Response will appear here...</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Security Filter Chain Flow</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:2">
+          POST /auth/login → <span style="color:var(--green)">permitAll()</span> → AuthManager.authenticate() → Generate JWT → 200 OK
+        </div>
+      </div>
+    </div>
+
+    <!-- JWT INSPECTOR -->
+    <div id="panel-jwt" class="panel">
+      <div class="panel-title">JWT Inspector</div>
+      <div class="panel-desc">A JWT has 3 Base64URL-encoded parts: <span style="color:var(--red)">Header</span>.<span style="color:var(--green)">Payload</span>.<span style="color:var(--yellow)">Signature</span> — paste any token to decode it live.</div>
+      <div class="card">
+        <div class="card-title">Token</div>
+        <button class="full sec" onclick="loadToken()">Load current access token</button>
+        <label>Raw JWT</label><input id="jwt-in" placeholder="eyJhbGciOiJIUzI1NiJ9..." oninput="decodeJwt()"/>
+      </div>
+      <div class="card">
+        <div class="card-title">Decoded</div>
+        <div id="jwt-dec" class="result">Paste a JWT above...</div>
+      </div>
+    </div>
+
+    <!-- OAUTH -->
+    <div id="panel-oauth" class="panel">
+      <div class="panel-title">OAuth 2.0 — Google Login</div>
+      <div class="panel-desc">OAuth 2.0 lets users sign in with an existing account (Google, GitHub) without creating a new password. Your app never sees the user's Google password.</div>
+      <div class="card">
+        <div class="card-title">OAuth 2.0 Authorization Code Flow</div>
+        <div style="font-family:var(--mono);font-size:12px;line-height:2.2;color:var(--muted)">
+          1. User clicks "Login with Google"<br>
+          &nbsp;&nbsp;&nbsp;<span style="color:var(--blue)">→ Redirect to accounts.google.com/oauth?client_id=...&redirect_uri=...</span><br>
+          2. User logs in on Google's page (your app sees NOTHING)<br>
+          3. Google redirects back with <span style="color:var(--green)">?code=AUTH_CODE</span><br>
+          4. Your backend: POST /token → exchange code for <span style="color:var(--yellow)">access_token</span><br>
+          5. Backend fetches user profile from Google API<br>
+          6. Backend issues your own JWT → sends to frontend<br>
+          7. Frontend stores JWT, uses it for all future requests
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Spring Boot OAuth2 Setup (pom.xml)</div>
+        <div class="result info" style="font-size:11px">&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-boot-starter-oauth2-client&lt;/artifactId&gt;
+&lt;/dependency&gt;
+
+# application.yml
+spring.security.oauth2.client.registration.google:
+  client-id: YOUR_GOOGLE_CLIENT_ID
+  client-secret: YOUR_SECRET
+  scope: email, profile</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Concepts</div>
+        <table>
+          <tr><th>Term</th><th>Meaning</th></tr>
+          <tr><td>Authorization Server</td><td>Google — authenticates the user</td></tr>
+          <tr><td>Resource Server</td><td>Your Spring Boot API</td></tr>
+          <tr><td>Client</td><td>Your React frontend</td></tr>
+          <tr><td>Access Token</td><td>Short-lived — used to call APIs</td></tr>
+          <tr><td>Refresh Token</td><td>Long-lived — gets new access tokens</td></tr>
+          <tr><td>Scope</td><td>Permissions requested (email, profile)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- RBAC -->
+    <div id="panel-rbac" class="panel">
+      <div class="panel-title">RBAC — @PreAuthorize</div>
+      <div class="panel-desc">Role-Based Access Control. @PreAuthorize evaluates a SpEL expression against the JWT roles AFTER JwtAuthFilter sets the SecurityContext.</div>
+      <div class="card">
+        <div class="card-title">LivePoll Permission Matrix</div>
+        <table>
+          <tr><th>Action</th><th>USER</th><th>MODERATOR</th><th>ADMIN</th></tr>
+          <tr><td>View public polls</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+          <tr><td>Cast a vote</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+          <tr><td>Create a poll</td><td class="cross">✗</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+          <tr><td>Close a poll</td><td class="cross">✗</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+          <tr><td>View all users</td><td class="cross">✗</td><td class="cross">✗</td><td class="tick">✓</td></tr>
+          <tr><td>Delete any poll</td><td class="cross">✗</td><td class="cross">✗</td><td class="tick">✓</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Test Endpoints</div>
+        <button onclick="call('GET','/public/polls')">GET /public/polls <span class="badge badge-green">permitAll</span></button>
+        <button onclick="call('GET','/api/dashboard')">GET /api/dashboard <span class="badge badge-blue">authenticated</span></button>
+        <button onclick="call('GET','/api/polls')">GET /api/polls <span class="badge badge-blue">authenticated</span></button>
+        <button onclick="call('GET','/api/admin/users')">GET /api/admin/users <span class="badge badge-red">ADMIN only</span></button>
+        <div id="rbac-res" class="result">Call an endpoint above...</div>
+      </div>
+    </div>
+
+    <!-- POLLS LIVE -->
+    <div id="panel-polls" class="panel">
+      <div class="panel-title">📊 LivePoll — RBAC in Action</div>
+      <div class="panel-desc">Login as different users to see which actions are available. MODERATOR/ADMIN can create polls. All authenticated users can vote.</div>
+      <div class="card">
+        <div class="card-title">Active Polls <button class="sec" style="float:right;padding:3px 10px;font-size:11px" onclick="loadPolls()">↻ Refresh</button></div>
+        <div id="polls-list">Login first to see polls...</div>
+      </div>
+      <div class="card" id="create-poll-card">
+        <div class="card-title">Create Poll <span class="badge badge-yellow">MODERATOR / ADMIN only</span></div>
+        <label>Question</label><input id="pq" placeholder="What is your favourite..."/>
+        <label>Options (comma separated)</label><input id="po" placeholder="Option A, Option B, Option C"/>
+        <button onclick="createPoll()">Create Poll</button>
+        <div id="create-res" class="result" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- CORS -->
+    <div id="panel-cors" class="panel">
+      <div class="panel-title">CORS — Cross-Origin Resource Sharing</div>
+      <div class="panel-desc">This HTML page runs on a different origin than the Spring backend (localhost:8080). Without CORS headers, the browser blocks all requests.</div>
+      <div class="card">
+        <div class="card-title">How CORS Works</div>
+        <div style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--muted)">
+          Browser (file:// or localhost:3000)<br>
+          &nbsp;&nbsp;<span style="color:var(--yellow)">→ OPTIONS /api/polls (preflight)</span><br>
+          Spring Security (localhost:8080)<br>
+          &nbsp;&nbsp;<span style="color:var(--green)">→ 200 + Access-Control-Allow-Origin: *</span><br>
+          Browser: ✓ CORS allowed, send real request<br>
+          &nbsp;&nbsp;<span style="color:var(--blue)">→ GET /api/polls (with JWT)</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">SecurityConfig CORS Bean</div>
+        <div class="result info" style="font-size:11px">config.setAllowedOrigins(List.of(
+  "http://localhost:3000",  // React
+  "http://localhost:5173",  // Vite
+  "http://127.0.0.1:5500", // VS Code Live Server
+  "null"                   // file:// origin
+));
+config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+config.setAllowedHeaders(List.of("*"));
+config.setAllowCredentials(true);</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Test CORS Live</div>
+        <button onclick="testCors()">Send cross-origin request → check log</button>
+        <div id="cors-res" class="result" style="margin-top:8px">—</div>
+      </div>
+    </div>
+
+    <!-- REFRESH -->
+    <div id="panel-refresh" class="panel">
+      <div class="panel-title">Refresh Token Flow</div>
+      <div class="panel-desc">When the access token expires, the frontend silently requests a new one using the refresh token — user never sees an error.</div>
+      <div class="card">
+        <div class="card-title">Flow Simulation</div>
+        <button class="full" onclick="animateRefresh()">▶ Simulate: Expired Token → Silent Refresh → Retry</button>
+        <div id="refresh-steps" style="margin-top:12px;font-family:var(--mono);font-size:12px;line-height:2;color:var(--muted)"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Test Real Refresh Endpoint</div>
+        <button onclick="doRefresh()">POST /auth/refresh (with stored refresh token)</button>
+        <div id="refresh-res" class="result" style="margin-top:8px">—</div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- LOG PANEL -->
+  <div class="log-panel">
+    <div class="log-header">
+      <span class="log-title">📡 Request Log</span>
+      <button class="clr-btn" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-body" id="log"></div>
+  </div>
+</main>
+
+<script>
+const BASE = 'http://localhost:8080';
+let accessToken = localStorage.getItem('lp_access') || null;
+let refreshToken = localStorage.getItem('lp_refresh') || null;
+let currentUser  = JSON.parse(localStorage.getItem('lp_user') || 'null');
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function show(name, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+  if (name === 'polls') loadPolls();
+  if (name === 'jwt' && accessToken) loadToken();
+}
+
+// ── Header pill ───────────────────────────────────────────────────────────────
+function updatePill() {
+  const pill = document.getElementById('pill');
+  if (currentUser) {
+    pill.classList.add('show');
+    document.getElementById('uname').textContent = currentUser.username;
+    document.getElementById('avatar').textContent = currentUser.username[0].toUpperCase();
+    const role = (currentUser.roles[0] || '').replace('ROLE_','');
+    document.getElementById('urole').textContent = role;
+  } else {
+    pill.classList.remove('show');
+  }
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const username = document.getElementById('lu').value;
+  const password = document.getElementById('lp').value;
+  addLog('req', `POST /auth/login  { username: "${username}" }`);
+  try {
+    const res = await fetch(BASE + '/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    accessToken = data.accessToken;
+    refreshToken = data.refreshToken;
+    currentUser = {username: data.username, roles: data.roles};
+    localStorage.setItem('lp_access',  accessToken);
+    localStorage.setItem('lp_refresh', refreshToken);
+    localStorage.setItem('lp_user',    JSON.stringify(currentUser));
+    updatePill();
+    const display = { username: data.username, roles: data.roles, tokenType: data.tokenType,
+      accessToken: accessToken.substring(0,50)+'...', refreshToken: refreshToken.substring(0,30)+'...' };
+    setResult('login-res','ok','200 OK\n\n' + JSON.stringify(display, null, 2));
+    addLog('ok', `✓ Logged in as ${data.username} [${data.roles.join(', ')}]`);
+  } catch(e) {
+    setResult('login-res','err','Error: ' + e.message);
+    addLog('err', '✗ ' + e.message);
+  }
+}
+
+async function quickLogin(u, p) {
+  document.getElementById('lu').value = u;
+  document.getElementById('lp').value = p;
+  await doLogin();
+}
+
+function doLogout() {
+  accessToken = refreshToken = currentUser = null;
+  ['lp_access','lp_refresh','lp_user'].forEach(k => localStorage.removeItem(k));
+  updatePill();
+  setResult('login-res','info','Logged out. Tokens removed from localStorage.\nJWT is stateless — no server call needed.');
+  addLog('info','Logged out — tokens cleared');
+}
+
+// ── JWT Inspector ─────────────────────────────────────────────────────────────
+function loadToken() {
+  document.getElementById('jwt-in').value = localStorage.getItem('lp_access') || '';
+  decodeJwt();
+}
+
+function decodeJwt() {
+  const t = document.getElementById('jwt-in').value.trim();
+  if (!t) return;
+  const parts = t.split('.');
+  if (parts.length !== 3) { setResult('jwt-dec','err','Not a valid JWT — needs 3 dot-separated parts'); return; }
+  try {
+    const b64 = s => s.replace(/-/g,'+').replace(/_/g,'/');
+    const header  = JSON.parse(atob(b64(parts[0])));
+    const payload = JSON.parse(atob(b64(parts[1])));
+    if (payload.exp) payload._expires = new Date(payload.exp * 1000).toLocaleString();
+    if (payload.iat) payload._issuedAt = new Date(payload.iat * 1000).toLocaleString();
+    const out = `HEADER (algorithm + type)\n${JSON.stringify(header,null,2)}\n\nPAYLOAD (claims)\n${JSON.stringify(payload,null,2)}\n\nSIGNATURE\n${parts[2]}\n(verified server-side only)`;
+    setResult('jwt-dec','ok', out);
+  } catch(e) { setResult('jwt-dec','err','Decode error: '+e.message); }
+}
+
+// ── Generic API call ──────────────────────────────────────────────────────────
+async function call(method, path, resultId = 'rbac-res') {
+  addLog('req', `${method} ${path}`);
+  try {
+    const headers = {'Content-Type':'application/json'};
+    if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
+    const res = await fetch(BASE + path, {method, headers});
+    const data = await res.json();
+    const cls = res.ok ? 'ok' : 'err';
+    setResult(resultId, cls, `${res.status}\n\n${JSON.stringify(data,null,2)}`);
+    addLog(res.ok ? 'ok' : 'err', `${res.ok ? '✓' : '✗'} ${method} ${path} → ${res.status}`);
+  } catch(e) {
+    setResult(resultId,'err','Network error — is the backend running?\n' + e.message);
+    addLog('err','Network error: '+e.message);
+  }
+}
+
+// ── Polls ─────────────────────────────────────────────────────────────────────
+async function loadPolls() {
+  const el = document.getElementById('polls-list');
+  if (!accessToken) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">Login first to see polls.</div>'; return; }
+  try {
+    const res = await fetch(BASE + '/api/polls', {headers:{'Authorization':'Bearer '+accessToken}});
+    const polls = await res.json();
+    if (!Array.isArray(polls) || polls.length === 0) { el.innerHTML = '<div style="color:var(--muted)">No polls found.</div>'; return; }
+    el.innerHTML = polls.map(p => renderPoll(p)).join('');
+  } catch(e) { el.innerHTML = '<div style="color:var(--red)">Error loading polls: '+e.message+'</div>'; }
+}
+
+function renderPoll(p) {
+  const total = Object.values(p.votes).reduce((a,b)=>a+b,0) || 1;
+  const opts = p.options.map(o => {
+    const pct = Math.round((p.votes[o]||0)/total*100);
+    return `<div class="poll-opt">
+      <span style="width:90px;font-size:12px;overflow:hidden;white-space:nowrap">${o}</span>
+      <div class="poll-bar-wrap"><div class="poll-bar" style="width:${pct}%"></div></div>
+      <span class="poll-pct">${pct}%</span>
+      <button style="padding:2px 8px;font-size:11px" onclick="vote('${p.id}','${o}')">Vote</button>
+    </div>`;
+  }).join('');
+  const closeBtn = currentUser && (currentUser.roles.includes('ROLE_ADMIN') || currentUser.roles.includes('ROLE_MODERATOR'))
+    ? `<button class="danger" style="padding:2px 8px;font-size:11px;float:right" onclick="closePoll('${p.id}')">Close</button>` : '';
+  const adminDel = currentUser && currentUser.roles.includes('ROLE_ADMIN')
+    ? `<button class="sec" style="padding:2px 8px;font-size:11px;float:right;margin-right:4px" onclick="deletePoll('${p.id}')">Delete</button>` : '';
+  return `<div class="poll-card">
+    <div class="poll-q">${p.question} ${p.active ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-red">closed</span>'} ${closeBtn}${adminDel}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">by ${p.createdBy} · ${Object.values(p.votes).reduce((a,b)=>a+b,0)} votes</div>
+    ${opts}
+  </div>`;
+}
+
+async function vote(pollId, option) {
+  addLog('req', `POST /api/polls/${pollId}/vote?option=${option}`);
+  try {
+    const res = await fetch(`${BASE}/api/polls/${pollId}/vote?option=${encodeURIComponent(option)}`, {
+      method:'POST', headers:{'Authorization':'Bearer '+accessToken}
+    });
+    const data = await res.json();
+    addLog(res.ok ? 'ok' : 'err', `${res.ok ? '✓ Voted' : '✗ '+data.error}`);
+    loadPolls();
+  } catch(e) { addLog('err','Vote error: '+e.message); }
+}
+
+async function createPoll() {
+  const question = document.getElementById('pq').value.trim();
+  const options = document.getElementById('po').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if (!question || options.length < 2) { setResult('create-res','err','Need a question and at least 2 options'); document.getElementById('create-res').style.display='block'; return; }
+  addLog('req','POST /api/polls');
+  try {
+    const res = await fetch(BASE+'/api/polls',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({question,options})});
+    const data = await res.json();
+    setResult('create-res', res.ok?'ok':'err', JSON.stringify(data,null,2));
+    document.getElementById('create-res').style.display='block';
+    addLog(res.ok?'ok':'err', res.ok?'✓ Poll created':'✗ '+data.error);
+    if (res.ok) loadPolls();
+  } catch(e) { addLog('err',e.message); }
+}
+
+async function closePoll(id) {
+  addLog('req',`PUT /api/polls/${id}/close`);
+  const res = await fetch(`${BASE}/api/polls/${id}/close`,{method:'PUT',headers:{'Authorization':'Bearer '+accessToken}});
+  const data = await res.json();
+  addLog(res.ok?'ok':'err', res.ok?`✓ Poll ${id} closed`:'✗ '+data.error);
+  loadPolls();
+}
+
+async function deletePoll(id) {
+  addLog('req',`DELETE /api/admin/polls/${id}`);
+  const res = await fetch(`${BASE}/api/admin/polls/${id}`,{method:'DELETE',headers:{'Authorization':'Bearer '+accessToken}});
+  const data = await res.json();
+  addLog(res.ok?'ok':'err', res.ok?`✓ Poll ${id} deleted`:'✗ '+data.error);
+  loadPolls();
+}
+
+// ── CORS test ─────────────────────────────────────────────────────────────────
+async function testCors() {
+  addLog('req','GET /public/polls (cross-origin test)');
+  try {
+    const res = await fetch(BASE+'/public/polls');
+    const data = await res.json();
+    setResult('cors-res','ok','✓ CORS OK!\nBrowser received Access-Control-Allow-Origin header.\n\n'+JSON.stringify(data,null,2).substring(0,300)+'...');
+    addLog('ok','✓ CORS passed — check Network tab for headers');
+  } catch(e) {
+    setResult('cors-res','err','✗ CORS failed or backend offline\n'+e.message);
+    addLog('err','✗ CORS blocked');
+  }
+}
+
+// ── Refresh flow ──────────────────────────────────────────────────────────────
+async function animateRefresh() {
+  const steps = [
+    'Component calls GET /api/dashboard',
+    'Request interceptor: attach access token (expired)',
+    'JwtAuthFilter: token expired → 401 Unauthorized',
+    'Response interceptor catches 401, sets _retry = true',
+    'POST /auth/refresh with stored refresh token...',
+    'Spring validates refresh token → new access token issued',
+    'New access token saved to localStorage',
+    'Original GET /api/dashboard retried with new token',
+    '✓ 200 OK — user never saw an error!',
+  ];
+  const el = document.getElementById('refresh-steps');
+  el.innerHTML = '';
+  for (let i = 0; i < steps.length; i++) {
+    await new Promise(r => setTimeout(r, 600));
+    const color = i === steps.length-1 ? 'var(--green)' : i === 4 ? 'var(--yellow)' : 'var(--muted)';
+    el.innerHTML += `<div style="color:${color}">  ${i+1}. ${steps[i]}</div>`;
+    addLog(i === steps.length-1 ? 'ok' : 'req', steps[i]);
+  }
+}
+
+async function doRefresh() {
+  const rt = localStorage.getItem('lp_refresh');
+  if (!rt) { setResult('refresh-res','err','No refresh token — login first!'); return; }
+  addLog('req','POST /auth/refresh');
+  try {
+    const res = await fetch(BASE+'/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refreshToken:rt})});
+    const data = await res.json();
+    if (res.ok) {
+      accessToken = data.accessToken;
+      localStorage.setItem('lp_access', accessToken);
+      setResult('refresh-res','ok','✓ New access token issued!\n\n'+JSON.stringify(data,null,2));
+      addLog('ok','✓ Token refreshed');
+    } else {
+      setResult('refresh-res','err',JSON.stringify(data,null,2));
+      addLog('err','✗ Refresh failed: '+res.status);
+    }
+  } catch(e) { addLog('err',e.message); }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setResult(id, cls, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'result ' + cls;
+  el.textContent = text;
+}
+
+function addLog(type, msg) {
+  const body = document.getElementById('log');
+  const time = new Date().toLocaleTimeString('en',{hour12:false});
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + type;
+  div.innerHTML = `<span class="log-time">${time}</span>${msg}`;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+updatePill();
+
+// Check backend alive
+fetch(BASE+'/public/polls').then(()=>addLog('ok','✓ Backend connected at '+BASE)).catch(()=>addLog('err','✗ Backend offline — run LivePollSecurityApplication.java first'));
+</script>
+</body>
+</html>

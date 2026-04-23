@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: "livepoll-super-secret-key-must-be-at-least-256-bits-long-for-HS256"
+    expiration-ms: 86400000        # 24 hours
+    refresh-expiration-ms: 604800000  # 7 days
+
+spring:
+  main:
+    banner-mode: off
+
+logging:
+  level:
+    com.livepoll: DEBUG
+    org.springframework.security: INFO
